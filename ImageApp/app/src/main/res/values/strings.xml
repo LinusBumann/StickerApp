@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">HSFL-Stickercapture</string>
     <string name="take_photo">Auf Sticker druecken!!!</string>
+    <string name="um_foto_zu_machen_in_der_preview_auf_den_sticker_druecken">Um Foto zu machen in der Preview auf den Sticker drücken</string>
 </resources>

@@ -28,4 +28,14 @@
         android:orientation="vertical"
         app:layout_constraintGuide_percent=".50" />
 
+    <TextView
+        android:id="@+id/beschreibung"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="60dp"
+        android:text="@string/um_foto_zu_machen_in_der_preview_auf_den_sticker_druecken"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>
