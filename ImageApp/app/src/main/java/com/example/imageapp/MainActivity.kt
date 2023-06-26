@@ -8,7 +8,9 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Matrix
+import android.graphics.Paint
 import android.graphics.Rect
 import android.media.ExifInterface
 import android.net.Uri
@@ -89,7 +91,7 @@ class MainActivity : AppCompatActivity() {
         Log.v("X-Touch", "X-Position $x")
         Log.v("Y-Touch", "Y-Position $y")
 
-        if (event?.action == MotionEvent.ACTION_DOWN && event.source != InputDevice.SOURCE_CLASS_BUTTON) {
+        if (event?.action == MotionEvent.ACTION_UP && event.source != InputDevice.SOURCE_CLASS_BUTTON) {
             val screenWidth = displayMetrics.widthPixels
             val screenHeight = displayMetrics.heightPixels
             val desiredWidth = screenWidth
@@ -97,12 +99,12 @@ class MainActivity : AppCompatActivity() {
 
             //Foto bei Berührung des Bildschirmes machen
             if (x != null && y != null && x <= screenWidth && y >= screenHeight - screenWidth) {
-                takePhoto()
-
-                val scaledX = (x.toFloat() / screenWidth * 1024).toInt()
-                val scaledY = ((y.toFloat() - (screenHeight - desiredHeight).toFloat()) / desiredHeight * 1024).toInt()
+                val scaledX = (x.toFloat() / screenWidth * 1024).toInt().coerceIn(0,1024)
+                val scaledY = ((y.toFloat() - (screenHeight - desiredHeight).toFloat()) / desiredHeight * 1024 - 100).toInt().coerceIn(0,1024)
+                takePhoto(scaledX, scaledY)
 
                 val fileName = "sticker_position_data.txt"
+
                 val downloadFolder =
                     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
                 val filePath = File(downloadFolder, fileName)
@@ -120,12 +122,19 @@ class MainActivity : AppCompatActivity() {
                 val msg = "Falsch gedrückt"
                 Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
             }
+            // Verhindere das Fotografieren, wenn der Benutzer den Menübutton nach oben wischt
+            if (event.source == InputDevice.SOURCE_CLASS_BUTTON) {
+                return true
+            }
         }
         return super.onTouchEvent(event)
     }
 
         @SuppressLint("ClickableViewAccessibility")
-    private fun takePhoto() {
+    private fun takePhoto(scaledX: Int, scaledY: Int) {
+
+        val xPositionRed = scaledX
+        val yPositionRed = scaledY
         // Get a stable reference of the modifiable image capture use case
         val imageCapture = imageCapture ?: return
 
@@ -170,7 +179,7 @@ class MainActivity : AppCompatActivity() {
                     val fileUri = contentResolver.convertContentUriToFileUri(savedUri) ?: return
 
 
-                    cropImage(fileUri)
+                    cropImage(fileUri, xPositionRed, yPositionRed)
                 }
             }
         )
@@ -189,10 +198,11 @@ class MainActivity : AppCompatActivity() {
         return Uri.parse("file://$path")
     }
 
-    private fun cropImage(uri: Uri) {
+    private fun cropImage(uri: Uri, xPositionRed: Int, yPositionRed: Int) {
         Log.v("URI", "Passende URI " + uri.path)
 
-        val originalBitmap = BitmapFactory.decodeFile(uri.path)
+        //val originalBitmap = BitmapFactory.decodeFile(uri.path)
+        val originalBitmap = BitmapFactory.decodeFileDescriptor(contentResolver.openFileDescriptor(uri, "r")?.fileDescriptor)
 
         //NEW
         val inputStream = contentResolver.openInputStream(uri)
@@ -217,6 +227,11 @@ class MainActivity : AppCompatActivity() {
         val dstRect = Rect(0, 0, 1024, 1024)
         canvas.drawBitmap(rotatedBitmap, srcRect, dstRect, null)
         //NEW
+
+        // Draw red point at touch coordinates
+        val paint = Paint()
+        paint.color = Color.RED
+        canvas.drawCircle(xPositionRed.toFloat(), yPositionRed.toFloat(), 10f, paint)
 
         val outputStream = contentResolver.openOutputStream(uri)
         croppedBitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
@@ -278,12 +293,9 @@ class MainActivity : AppCompatActivity() {
         private val REQUIRED_PERMISSIONS =
             mutableListOf (
                 Manifest.permission.CAMERA,
-                Manifest.permission.RECORD_AUDIO
-            ).apply {
-                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
-                    add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                }
-            }.toTypedArray()
+                Manifest.permission.RECORD_AUDIO,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ).toTypedArray()
     }
 
     override fun onRequestPermissionsResult(
