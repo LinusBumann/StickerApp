@@ -8,9 +8,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.Matrix
-import android.graphics.Paint
 import android.graphics.Rect
 import android.media.ExifInterface
 import android.net.Uri
@@ -91,25 +89,9 @@ class MainActivity : AppCompatActivity() {
             if (x != null && y != null && x <= screenWidth && y >= screenHeight - screenWidth) {
                 val scaledX = (x.toFloat() / screenWidth * 1024).toInt().coerceIn(0,1024)
                 val scaledY = ((y.toFloat() - (screenHeight - desiredHeight).toFloat()) / desiredHeight * 1024 - 100).toInt().coerceIn(0,1024)
-                takePhoto(scaledX, scaledY)
-
-                val fileName = "sticker_position_data.txt"
-
-                val downloadFolder =
-                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                val filePath = File(downloadFolder, fileName)
-
-                if (currentPhotoName != null) {
-                    try {
-                        FileOutputStream(filePath, true).use { fos ->
-                            OutputStreamWriter(fos).use { osw ->
-                                osw.write("$currentPhotoName, $scaledX,$scaledY;\n")
-                            }
-                        }
-                    } catch (e: IOException) {
-                        e.printStackTrace()
-                    }
-                }
+                currentPhotoName = generateUniqueFileName()
+                takePhoto(scaledX, scaledY, currentPhotoName)
+                saveCoordinatesToFile(scaledX, scaledY, currentPhotoName)
             } else {
                 val msg = "Falsch gedrückt"
                 Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
@@ -136,9 +118,24 @@ class MainActivity : AppCompatActivity() {
         return fileName
     }
 
+    private fun saveCoordinatesToFile(x: Int, y: Int, currentPhotoName: String?) {
+        val fileName = "sticker_position_data.txt"
+        val downloadFolder = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val filePath = File(downloadFolder, fileName)
+
+        try {
+            FileOutputStream(filePath, true).use { fos ->
+                OutputStreamWriter(fos).use { osw ->
+                    osw.write("$currentPhotoName, $x,$y;\n")
+                }
+            }
+        } catch (e: IOException) {
+            e.printStackTrace()
+        }
+    }
 
     @SuppressLint("ClickableViewAccessibility")
-    private fun takePhoto(scaledX: Int, scaledY: Int) {
+    private fun takePhoto(scaledX: Int, scaledY: Int, currentPhotoName: String?) {
 
         val xPositionRed = scaledX
         val yPositionRed = scaledY
@@ -177,9 +174,6 @@ class MainActivity : AppCompatActivity() {
 
                     val savedUri = output.savedUri ?: return
 
-                    // Extrahiere den Dateinamen des Bildes aus der URI
-                    currentPhotoName = generateUniqueFileName()
-
                     val msg = "Photo capture succeeded: $savedUri"
                     Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
                     Log.d(TAG, msg)
@@ -188,7 +182,7 @@ class MainActivity : AppCompatActivity() {
                     val contentResolver = applicationContext.contentResolver
                     val fileUri = contentResolver.convertContentUriToFileUri(savedUri) ?: return
 
-                    cropImage(fileUri, xPositionRed, yPositionRed)
+                    cropImage(fileUri, xPositionRed, yPositionRed, currentPhotoName)
                 }
             }
         )
@@ -212,7 +206,7 @@ class MainActivity : AppCompatActivity() {
         return "IMG_$timestamp.jpg"
     }
 
-    private fun cropImage(uri: Uri, xPositionRed: Int, yPositionRed: Int) {
+    private fun cropImage(uri: Uri, xPositionRed: Int, yPositionRed: Int, currentPhotoName: String?) {
         Log.v("URI", "Passende URI " + uri.path)
 
         //val originalBitmap = BitmapFactory.decodeFile(uri.path)
@@ -250,6 +244,11 @@ class MainActivity : AppCompatActivity() {
         val outputStream = contentResolver.openOutputStream(uri)
         croppedBitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
         outputStream?.close()
+
+        // Umbenennen des gespeicherten Bildes mit dem generierten Dateinamen
+        val imageFile = File(uri.path)
+        val renamedFile = File(imageFile.parent, currentPhotoName)
+        imageFile.renameTo(renamedFile)
     }
 
     private fun startCamera() {
