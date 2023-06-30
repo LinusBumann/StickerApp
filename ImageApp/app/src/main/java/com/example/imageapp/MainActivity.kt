@@ -18,6 +18,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.ImageCapture
 import androidx.core.app.ActivityCompat
@@ -41,6 +42,7 @@ import java.io.IOException
 import java.io.OutputStreamWriter
 
 import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 
@@ -50,6 +52,8 @@ class MainActivity : AppCompatActivity() {
     private var imageCapture: ImageCapture? = null
 
     private lateinit var cameraExecutor: ExecutorService
+
+    private var currentPhotoName: String? = null
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,20 +68,6 @@ class MainActivity : AppCompatActivity() {
             ActivityCompat.requestPermissions(
                 this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
         }
-
-        /* Set up the listeners for take photo capture buttons
-        viewBinding.imageCaptureButton.setOnClickListener {
-            takePhoto()
-        }*/
-
-        /*NEW
-        // Set up the listeners for take photo capture buttons
-        viewBinding.imageCaptureButton.setOnTouchListener { _, event ->
-            // Weiterleitung des Touch-Ereignisses an onTouchEvent()
-            onTouchEvent(event)
-            true // Rückgabe von true, um zu signalisieren, dass das Touch-Ereignis behandelt wurde
-        }
-       NEW*/
 
         cameraExecutor = Executors.newSingleThreadExecutor()
     }
@@ -109,14 +99,16 @@ class MainActivity : AppCompatActivity() {
                     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
                 val filePath = File(downloadFolder, fileName)
 
-                try {
-                    FileOutputStream(filePath, true).use { fos ->
-                        OutputStreamWriter(fos).use { osw ->
-                            osw.write("Sticker position: ($scaledX,$scaledY)\n")
+                if (currentPhotoName != null) {
+                    try {
+                        FileOutputStream(filePath, true).use { fos ->
+                            OutputStreamWriter(fos).use { osw ->
+                                osw.write("$currentPhotoName, $scaledX,$scaledY;\n")
+                            }
                         }
+                    } catch (e: IOException) {
+                        e.printStackTrace()
                     }
-                } catch (e: IOException) {
-                    e.printStackTrace()
                 }
             } else {
                 val msg = "Falsch gedrückt"
@@ -130,7 +122,22 @@ class MainActivity : AppCompatActivity() {
         return super.onTouchEvent(event)
     }
 
-        @SuppressLint("ClickableViewAccessibility")
+    private fun getFileNameFromUri(uri: Uri): String? {
+        var fileName: String? = null
+        val cursor = contentResolver.query(uri, null, null, null, null)
+        cursor?.use {
+            if (it.moveToFirst()) {
+                val displayNameIndex = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (displayNameIndex != -1) {
+                    fileName = it.getString(displayNameIndex)
+                }
+            }
+        }
+        return fileName
+    }
+
+
+    @SuppressLint("ClickableViewAccessibility")
     private fun takePhoto(scaledX: Int, scaledY: Int) {
 
         val xPositionRed = scaledX
@@ -170,6 +177,9 @@ class MainActivity : AppCompatActivity() {
 
                     val savedUri = output.savedUri ?: return
 
+                    // Extrahiere den Dateinamen des Bildes aus der URI
+                    currentPhotoName = generateUniqueFileName()
+
                     val msg = "Photo capture succeeded: $savedUri"
                     Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
                     Log.d(TAG, msg)
@@ -177,7 +187,6 @@ class MainActivity : AppCompatActivity() {
                     // Convert content URI to file URI
                     val contentResolver = applicationContext.contentResolver
                     val fileUri = contentResolver.convertContentUriToFileUri(savedUri) ?: return
-
 
                     cropImage(fileUri, xPositionRed, yPositionRed)
                 }
@@ -196,6 +205,11 @@ class MainActivity : AppCompatActivity() {
         cursor.close()
 
         return Uri.parse("file://$path")
+    }
+
+    private fun generateUniqueFileName(): String {
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        return "IMG_$timestamp.jpg"
     }
 
     private fun cropImage(uri: Uri, xPositionRed: Int, yPositionRed: Int) {
@@ -228,10 +242,10 @@ class MainActivity : AppCompatActivity() {
         canvas.drawBitmap(rotatedBitmap, srcRect, dstRect, null)
         //NEW
 
-        // Draw red point at touch coordinates
+        /* Draw red point at touch coordinates
         val paint = Paint()
         paint.color = Color.RED
-        canvas.drawCircle(xPositionRed.toFloat(), yPositionRed.toFloat(), 10f, paint)
+        canvas.drawCircle(xPositionRed.toFloat(), yPositionRed.toFloat(), 10f, paint)*/
 
         val outputStream = contentResolver.openOutputStream(uri)
         croppedBitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
@@ -294,7 +308,8 @@ class MainActivity : AppCompatActivity() {
             mutableListOf (
                 Manifest.permission.CAMERA,
                 Manifest.permission.RECORD_AUDIO,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE
+                Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                Manifest.permission.READ_EXTERNAL_STORAGE
             ).toTypedArray()
     }
 
